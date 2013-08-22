@@ -212,6 +212,7 @@ module ApplicationHelper
   # (eg. some intermediate nodes are private and can not be seen)
   def render_project_nested_lists(projects)
     s = ''
+    s << '<ul id="browser" class="filetree treeview-famfamfam">'
     if projects.any?
       ancestors = []
       original_project = @project
@@ -219,7 +220,7 @@ module ApplicationHelper
         # set the project environment to please macros.
         @project = project
         if (ancestors.empty? || project.is_descendant_of?(ancestors.last))
-          s << "<ul class='projects #{ ancestors.empty? ? 'root' : nil}'>\n"
+          s << "<ul>\n"
         else
           ancestors.pop
           s << "</li>"
@@ -229,14 +230,15 @@ module ApplicationHelper
           end
         end
         classes = (ancestors.empty? ? 'root' : 'child')
-        s << "<li class='#{classes}'><div class='#{classes}'>"
+        s << "<li>"
         s << h(block_given? ? yield(project) : project.name)
-        s << "</div>\n"
+        s << "\n"
         ancestors << project
       end
       s << ("</li></ul>\n" * ancestors.size)
       @project = original_project
     end
+    s << '</ul>'
     s.html_safe
   end
 
@@ -330,7 +332,7 @@ module ApplicationHelper
     end
     groups = ''
     collection.sort.each do |element|
-      selected_attribute = ' selected="selected"' if option_value_selected?(element, selected) || element.id.to_s == selected
+      selected_attribute = ' selected="selected"' if option_value_selected?(element, selected)
       (element.is_a?(Group) ? groups : s) << %(<option value="#{element.id}"#{selected_attribute}>#{h element.name}</option>)
     end
     unless groups.empty?
@@ -346,10 +348,6 @@ module ApplicationHelper
       {:disabled => principal.projects.to_a.include?(p)}
     end
     options
-  end
-
-  def option_tag(name, text, value, selected=nil, options={})
-    content_tag 'option', value, options.merge(:value => value, :selected => (value == selected))
   end
 
   # Truncates and returns the string as a single line
@@ -449,31 +447,12 @@ module ApplicationHelper
     end
   end
 
-  # Returns a h2 tag and sets the html title with the given arguments
-  def title(*args)
-    strings = args.map do |arg|
-      if arg.is_a?(Array) && arg.size >= 2
-        link_to(*arg)
-      else
-        h(arg.to_s)
-      end
-    end
-    html_title args.reverse.map {|s| (s.is_a?(Array) ? s.first : s).to_s}
-    content_tag('h2', strings.join(' &#187; ').html_safe)
-  end
-
-  # Sets the html title
-  # Returns the html title when called without arguments
-  # Current project name and app_title and automatically appended
-  # Exemples:
-  #   html_title 'Foo', 'Bar'
-  #   html_title # => 'Foo - Bar - My Project - Redmine'
   def html_title(*args)
     if args.empty?
       title = @html_title || []
       title << @project.name if @project
       title << Setting.app_title unless Setting.app_title == title.last
-      title.reject(&:blank?).join(' - ')
+      title.select {|t| !t.blank? }.join(' - ')
     else
       @html_title ||= []
       @html_title += args
@@ -638,7 +617,7 @@ module ApplicationHelper
             else
               wiki_page_id = page.present? ? Wiki.titleize(page) : nil
               parent = wiki_page.nil? && obj.is_a?(WikiContent) && obj.page && project == link_project ? obj.page.title : nil
-              url_for(:only_path => only_path, :controller => 'wiki', :action => 'show', :project_id => link_project,
+              url_for(:only_path => only_path, :controller => 'wiki', :action => 'show', :project_id => link_project, 
                :id => wiki_page_id, :version => nil, :anchor => anchor, :parent => parent)
             end
           end
@@ -679,9 +658,6 @@ module ApplicationHelper
   #     export:some/file -> Force the download of the file
   #   Forum messages:
   #     message#1218 -> Link to message with id 1218
-  #  Projects:
-  #     project:someproject -> Link to project named "someproject"
-  #     project#3 -> Link to project with id 3
   #
   #   Links can refer other objects from other projects, using project identifier:
   #     identifier:r52
@@ -718,7 +694,7 @@ module ApplicationHelper
           when nil
             if oid.to_s == identifier && issue = Issue.visible.find_by_id(oid, :include => :status)
               anchor = comment_id ? "note-#{comment_id}" : nil
-              link = link_to(h("##{oid}#{comment_suffix}"), {:only_path => only_path, :controller => 'issues', :action => 'show', :id => oid, :anchor => anchor},
+              link = link_to("##{oid}", {:only_path => only_path, :controller => 'issues', :action => 'show', :id => oid, :anchor => anchor},
                                         :class => issue.css_classes,
                                         :title => "#{truncate(issue.subject, :length => 100)} (#{issue.status.name})")
             end
@@ -1001,7 +977,7 @@ module ApplicationHelper
       html << "</ul></div>\n"
     end
     html.html_safe
-  end
+  end  
 
   def delete_link(url, options={})
     options = {
@@ -1015,8 +991,8 @@ module ApplicationHelper
 
   def preview_link(url, form, target='preview', options={})
     content_tag 'a', l(:label_preview), {
-        :href => "#",
-        :onclick => %|submitPreview("#{escape_javascript url_for(url)}", "#{escape_javascript form}", "#{escape_javascript target}"); return false;|,
+        :href => "#", 
+        :onclick => %|submitPreview("#{escape_javascript url_for(url)}", "#{escape_javascript form}", "#{escape_javascript target}"); return false;|, 
         :accesskey => accesskey(:preview)
       }.merge(options)
   end
@@ -1094,7 +1070,6 @@ module ApplicationHelper
 
   def include_calendar_headers_tags
     unless @calendar_headers_tags_included
-      tags = javascript_include_tag("datepicker")
       @calendar_headers_tags_included = true
       content_for :header_tags do
         start_of_week = Setting.start_of_week
@@ -1102,16 +1077,15 @@ module ApplicationHelper
         # Redmine uses 1..7 (monday..sunday) in settings and locales
         # JQuery uses 0..6 (sunday..saturday), 7 needs to be changed to 0
         start_of_week = start_of_week.to_i % 7
-        tags << javascript_tag(
+
+        tags = javascript_tag(
                    "var datepickerOptions={dateFormat: 'yy-mm-dd', firstDay: #{start_of_week}, " +
-                     "showOn: 'button', buttonImageOnly: true, buttonImage: '" +
+                     "showOn: 'button', buttonImageOnly: true, buttonImage: '" + 
                      path_to_image('/images/calendar.png') +
-                     "', showButtonPanel: true, showWeek: true, showOtherMonths: true, " +
-                     "selectOtherMonths: true, changeMonth: true, changeYear: true, " +
-                     "beforeShow: beforeShowDatePicker};")
+                     "', showButtonPanel: true, showWeek: true, showOtherMonths: true, selectOtherMonths: true};")
         jquery_locale = l('jquery.locale', :default => current_language.to_s)
         unless jquery_locale == 'en'
-          tags << javascript_include_tag("i18n/jquery.ui.datepicker-#{jquery_locale}.js")
+          tags << javascript_include_tag("i18n/jquery.ui.datepicker-#{jquery_locale}.js") 
         end
         tags
       end
